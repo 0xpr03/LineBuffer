@@ -1,0 +1,9 @@
+[package]
+name = "linebuffer"
+version = "0.1.0"
+authors = ["Aron Heinecke <aron.heinecke@t-online.de>"]
+edition = "2018"
+
+[dependencies]
+arraydeque = "0.4"
+byteorder = "1"
