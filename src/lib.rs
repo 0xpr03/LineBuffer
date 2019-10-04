@@ -1,20 +1,124 @@
-use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
-
+use ::std::fmt::Debug;
+use arraydeque::{Array, ArrayDeque, Wrapping};
+pub use generic_array::typenum;
+use generic_array::{ArrayLength, GenericArray};
 /// Circular
-pub struct LineBuffer {
+pub struct LineBuffer<T, B>
+where
+    T: Debug,
+    B: ArrayLength<Entry<T>>,
+{
     data: Vec<u8>,
+    book_keeping: BookKeeping<T, B>,
+    /// pointing to next free space in data array
     tail: usize,
+    /// total amount of inserted items
     elements: usize,
 }
 
-impl LineBuffer {
-    /// Create new circular buffer of defined size
+struct BookKeeping<T, B>
+where
+    T: Debug,
+    B: ArrayLength<Entry<T>>,
+{
+    index: ArrayDeque<GenericArray<Entry<T>, B>, Wrapping>,
+}
+
+impl<T, B> BookKeeping<T, B>
+where
+    T: Debug,
+    B: ArrayLength<Entry<T>>,
+{
+    fn new() -> Self {
+        Self {
+            index: ArrayDeque::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn print_index(&self) {
+        dbg!(&self.index);
+    }
+
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.index.capacity()
+    }
+
+    fn append(&mut self, addition: T, start: usize, length: usize) {
+        self.index.push_back(Entry {
+            start,
+            length,
+            valid: true,
+            addition,
+        });
+    }
+
+    fn get(&self, idx: usize, current_max: usize) -> Option<&Entry<T>> {
+        dbg!(self.index.capacity());
+        dbg!(current_max);
+        let min = current_max - self.index.capacity();
+        dbg!(min);
+        let pos = if idx >= min {
+            idx - min
+        } else {
+            idx
+        };
+        dbg!(pos);
+        self.index.get(pos)
+    }
+
+    fn invalidate_until(&mut self, start: usize, length: usize) {
+        // dbg!(start);
+        let end = start + length;
+        let mut found = false;
+        for entry in self.index.iter_mut() {
+            if entry.valid {
+                if entry.start >= start && entry.start < end {
+                    // dbg!(&entry);
+                    entry.valid = false;
+                    found = true;
+                } else if found {
+                    break; // early return
+                }
+            }
+        }
+    }
+}
+
+// not supposed to be public..
+#[derive(Debug)]
+pub struct Entry<T>
+where
+    T: Debug,
+{
+    start: usize,
+    length: usize,
+    valid: bool,
+    addition: T,
+}
+
+impl<T, B> LineBuffer<T, B>
+where
+    T: Debug,
+    B: ArrayLength<Entry<T>>,
+{
+    /// Create new circular buffer of defined size (bytes)
+    ///
+    /// Note that the capacity includes book keeping
     pub fn new(max: usize) -> Self {
         Self {
-            data: Vec::with_capacity(max),
+            data: vec![0; max],
             elements: 0,
             tail: 0,
+            book_keeping: BookKeeping::new(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn get_all_data(&self) -> String {
+        self.book_keeping.print_index();
+        String::from_utf8_lossy(&self.data).to_string()
     }
 
     /// Amount of elements in buffer
@@ -27,118 +131,96 @@ impl LineBuffer {
         self.tail
     }
 
-    /// Length of first element in ringbuffer
-    pub fn next_element_len(&self) -> Option<usize> {
-        self.data
-            .get(0..4)
-            .and_then(|mut v| v.read_u32::<NativeEndian>().ok().map(|r| r as usize))
-    }
-
-    /// Remove first element in ringbuffer (wrap)
-    fn pop(&mut self) -> Option<Vec<u8>> {
-        self.next_element_len().map(|chunk_size| {
-            self.tail -= chunk_size + 4;
-            self.elements -= 1;
-            self.data
-                .splice(..(chunk_size + 4), vec![])
-                .skip(4)
-                .collect()
-        })
-    }
-
     // Get element at index
     pub fn get(&self, idx: usize) -> Option<&[u8]> {
         if self.elements <= idx {
             return None;
         }
-        let mut current_head = 0;
-        let mut current_element = 0;
-        while current_head < self.len() - 4 {
-            // Get the length of the next block
-            let element_size = self
-                .data
-                .get(0..4)
-                .and_then(|mut v| v.read_u32::<NativeEndian>().ok().map(|r| r as usize))
-                .unwrap();
-            if current_element == idx {
-                return self
-                    .data
-                    .get((current_head + 4)..(current_head + element_size + 4));
+        if self.elements - self.book_keeping.size() > idx {
+            return None;
+        }
+        let entry = self.book_keeping.get(idx, self.elements());
+        dbg!(entry);
+        if let Some(entry) = entry {
+            if entry.valid {
+                return Some(&self.data[entry.start..entry.start + entry.length]);
             }
-            current_element += 1;
-            current_head += 4 + element_size;
         }
         return None;
     }
 
     /// Insert element
-    pub fn insert(&mut self, mut element: Vec<u8>, ) {
+    pub fn insert(&mut self, element: &[u8], addition: T) {
         let e_len = element.len();
-
-        let capacity = self.data.capacity();
-        while self.len() + e_len + 4 > capacity {
-            self.pop();
+        let offset;
+        let length = e_len;
+        dbg!(self.tail + e_len > self.data.len());
+        if self.tail + e_len > self.data.len() {
+            offset = 0;
+            self.tail = length;
+        } else {
+            offset = self.tail;
+            self.tail += length;
         }
-        self.data.write_u32::<NativeEndian>(e_len as u32).unwrap();
-        self.data.append(&mut element);
-        self.tail += 4 + e_len;
+        &self.data[offset..self.tail].copy_from_slice(&element);
+        self.book_keeping.invalidate_until(offset, length);
+        self.book_keeping.append(addition, offset, length);
         self.elements += 1;
-        println!("{:?}", self.data);
     }
 }
 
 #[test]
-fn buffer_inserts() {
-    let mut buffer = LineBuffer::new(100);
-    buffer.insert("this is a test".as_bytes().to_vec());
-    assert_eq!(buffer.pop().unwrap(), "this is a test".as_bytes().to_vec());
+fn insert_simple() {
+    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
+    for i in 0..8 {
+        buffer.insert(format!("{}", i).as_bytes(), 0);
+    }
+    dbg!(String::from_utf8_lossy(buffer.get(0).unwrap()));
+    for i in 0..8 {
+        // dbg!(i);
+        // dbg!(buffer.get(i));
+        assert_eq!(buffer.get(i), Some(format!("{}", i).as_bytes()));
+    }
+    assert_eq!(buffer.get(8), None);
 }
+
 #[test]
-fn buffer_truncates() {
-    let mut buffer = LineBuffer::new(10);
-    buffer.insert("foo".as_bytes().to_vec()); // 7 bytes in buffer
-    buffer.insert("bar".as_bytes().to_vec()); // overflowed and cleared the first message
-    assert_eq!(buffer.pop().unwrap(), "bar".as_bytes().to_vec());
-    assert_eq!(buffer.elements(), 0);
+fn insert_overflow_index() {
+    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
+    for i in 0..8 {
+        buffer.insert(format!("{}", i).as_bytes(), 0);
+    }
+    buffer.insert(format!("{}", 8).as_bytes(), 0);
+    dbg!(buffer.get_all_data());
+    assert_eq!(buffer.get(0), None);
+    // assert_eq!(buffer.get(1), Some(format!("{}", 1).as_bytes()));
+    for i in 1..9 {
+        dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
+        assert_eq!(buffer.get(i),Some(format!("{}",i).as_bytes()));
+    }
 }
+
 #[test]
-fn buffer_seeks() {
-    let mut buffer = LineBuffer::new(100);
-    buffer.insert("foo".as_bytes().to_vec());
-    buffer.insert("bar".as_bytes().to_vec());
-    buffer.insert("baz".as_bytes().to_vec());
-    assert_eq!(buffer.get(0), Some("foo".as_bytes()));
-
-    assert_eq!(buffer.get(1), Some("bar".as_bytes()));
-    buffer.pop();
-
-    println!("{:?}", std::str::from_utf8(&buffer.data).unwrap());
-    assert_eq!(buffer.get(1), Some("baz".as_bytes()));
-
-    assert_eq!(buffer.get(3), None);
+fn insert_overflow_full() {
+    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(8);
+    for i in 0..100 {
+        buffer.insert(format!("{}",i).as_bytes(), ());
+        
+    }
+    for i in 1..96 {
+        // dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
+        dbg!(i);
+        assert_eq!(buffer.get(i),None);
+    }
+    dbg!(buffer.get_all_data());
+    for i in 96..100 {
+        dbg!(i);
+        assert_eq!(buffer.get(i),Some(format!("{}",i).as_bytes()));
+    }
 }
 
 #[test]
 fn buffer_wraps() {
-    let mut buffer = LineBuffer::new(20);
-    buffer.insert("foo".as_bytes().to_vec());
-    dbg!(buffer.next_element_len());
-    buffer.insert("bar".as_bytes().to_vec());
-    dbg!(buffer.next_element_len());
-    buffer.insert("baz".as_bytes().to_vec());
-    dbg!(buffer.next_element_len());
-    println!("{:?}", std::str::from_utf8(&buffer.data).unwrap());
-    buffer.insert("asdasdasd".as_bytes().to_vec());
-    println!("{:?}", std::str::from_utf8(&buffer.data).unwrap());
-    buffer.insert("123456".as_bytes().to_vec());
-    println!("{:?}", std::str::from_utf8(&buffer.data).unwrap());
-    buffer.insert("a".as_bytes().to_vec());
-    dbg!(buffer.next_element_len());
-    buffer.insert("b".as_bytes().to_vec());
-    dbg!(buffer.next_element_len());
-    buffer.insert("c".as_bytes().to_vec());
-    dbg!(buffer.next_element_len());
-    println!("{:?}", std::str::from_utf8(&buffer.data).unwrap());
-    buffer.pop();
-    println!("{:?}", std::str::from_utf8(&buffer.data).unwrap());
+    // let mut buffer = LineBuffer::new(20);
+    // buffer.insert("foo".as_bytes(), 0);
 }

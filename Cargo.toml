@@ -5,5 +5,5 @@ authors = ["Aron Heinecke <aron.heinecke@t-online.de>"]
 edition = "2018"
 
 [dependencies]
-arraydeque = "0.4"
-byteorder = "1"
+arraydeque = {features= ["use_generic_array"], version = "0.4" }
+generic-array = "0.12"
