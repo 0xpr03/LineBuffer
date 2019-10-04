@@ -1,5 +1,5 @@
 use ::std::fmt::Debug;
-use arraydeque::{Array, ArrayDeque, Wrapping};
+use arraydeque::{ArrayDeque, Wrapping};
 pub use generic_array::typenum;
 use generic_array::{ArrayLength, GenericArray};
 /// Circular
@@ -55,27 +55,17 @@ where
     }
 
     fn get(&self, idx: usize, current_max: usize) -> Option<&Entry<T>> {
-        dbg!(self.index.capacity());
-        dbg!(current_max);
         let min = current_max - self.index.capacity();
-        dbg!(min);
-        let pos = if idx >= min {
-            idx - min
-        } else {
-            idx
-        };
-        dbg!(pos);
+        let pos = if idx >= min { idx - min } else { idx };
         self.index.get(pos)
     }
 
     fn invalidate_until(&mut self, start: usize, length: usize) {
-        // dbg!(start);
         let end = start + length;
         let mut found = false;
         for entry in self.index.iter_mut() {
             if entry.valid {
                 if entry.start >= start && entry.start < end {
-                    // dbg!(&entry);
                     entry.valid = false;
                     found = true;
                 } else if found {
@@ -140,7 +130,6 @@ where
             return None;
         }
         let entry = self.book_keeping.get(idx, self.elements());
-        dbg!(entry);
         if let Some(entry) = entry {
             if entry.valid {
                 return Some(&self.data[entry.start..entry.start + entry.length]);
@@ -154,7 +143,6 @@ where
         let e_len = element.len();
         let offset;
         let length = e_len;
-        dbg!(self.tail + e_len > self.data.len());
         if self.tail + e_len > self.data.len() {
             offset = 0;
             self.tail = length;
@@ -175,7 +163,7 @@ fn insert_simple() {
     for i in 0..8 {
         buffer.insert(format!("{}", i).as_bytes(), 0);
     }
-    dbg!(String::from_utf8_lossy(buffer.get(0).unwrap()));
+    // dbg!(String::from_utf8_lossy(buffer.get(0).unwrap()));
     for i in 0..8 {
         // dbg!(i);
         // dbg!(buffer.get(i));
@@ -191,12 +179,12 @@ fn insert_overflow_index() {
         buffer.insert(format!("{}", i).as_bytes(), 0);
     }
     buffer.insert(format!("{}", 8).as_bytes(), 0);
-    dbg!(buffer.get_all_data());
+    // dbg!(buffer.get_all_data());
     assert_eq!(buffer.get(0), None);
     // assert_eq!(buffer.get(1), Some(format!("{}", 1).as_bytes()));
     for i in 1..9 {
-        dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
-        assert_eq!(buffer.get(i),Some(format!("{}",i).as_bytes()));
+        // dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
+        assert_eq!(buffer.get(i), Some(format!("{}", i).as_bytes()));
     }
 }
 
@@ -204,18 +192,20 @@ fn insert_overflow_index() {
 fn insert_overflow_full() {
     let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(8);
     for i in 0..100 {
-        buffer.insert(format!("{}",i).as_bytes(), ());
-        
+        buffer.insert(format!("{}", i).as_bytes(), ());
     }
     for i in 1..96 {
         // dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
-        dbg!(i);
-        assert_eq!(buffer.get(i),None);
+        // dbg!(i);
+        assert_eq!(buffer.get(i), None);
     }
-    dbg!(buffer.get_all_data());
+    // dbg!(buffer.get_all_data());
     for i in 96..100 {
-        dbg!(i);
-        assert_eq!(buffer.get(i),Some(format!("{}",i).as_bytes()));
+        // dbg!(i);
+        assert_eq!(buffer.get(i), Some(format!("{}", i).as_bytes()));
+    }
+    for i in 100..200 {
+        assert_eq!(buffer.get(i), None);
     }
 }
 
