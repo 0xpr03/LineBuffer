@@ -135,7 +135,7 @@ where
                 return Some(&self.data[entry.start..entry.start + entry.length]);
             }
         }
-        return None;
+        None
     }
 
     /// Insert element
@@ -150,7 +150,7 @@ where
             offset = self.tail;
             self.tail += length;
         }
-        &self.data[offset..self.tail].copy_from_slice(&element);
+        self.data[offset..self.tail].copy_from_slice(&element);
         self.book_keeping.invalidate_until(offset, length);
         self.book_keeping.append(addition, offset, length);
         self.elements += 1;
