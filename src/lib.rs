@@ -1,5 +1,6 @@
 use ::std::fmt::Debug;
-use arraydeque::{ArrayDeque, Wrapping};
+use ::std::iter::Iterator;
+use arraydeque::{self, ArrayDeque, Wrapping};
 pub use generic_array::typenum;
 use generic_array::{ArrayLength, GenericArray};
 /// Circular
@@ -14,6 +15,31 @@ where
     tail: usize,
     /// total amount of inserted items
     elements: usize,
+}
+
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
+pub struct Iter<'a, T: Debug> {
+    len: usize,
+    data: &'a [u8],
+    iter_book: arraydeque::Iter<'a, Entry<T>>
+}
+
+impl<'a, T> Iterator for Iter<'a, T>
+where T: Debug {
+    type Item = &'a [u8];
+
+    #[inline]
+    fn next(&mut self) -> Option<&'a [u8]> {
+        if let Some(entry) = self.iter_book.next() {
+            return Some(&self.data[entry.start..entry.start+entry.length]);
+        }
+        None
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len, Some(self.len))
+    }
 }
 
 struct BookKeeping<T, B>
@@ -41,8 +67,18 @@ where
     }
 
     #[inline]
-    pub fn size(&self) -> usize {
+    fn iter(&self) -> arraydeque::Iter<Entry<T>> {
+        self.index.iter()
+    }
+
+    #[inline]
+    pub fn capacity(&self) -> usize {
         self.index.capacity()
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.index.len()
     }
 
     fn append(&mut self, addition: T, start: usize, length: usize) {
@@ -105,20 +141,47 @@ where
         }
     }
 
+    /// Debugging only
     #[cfg(test)]
     pub fn get_all_data(&self) -> String {
         self.book_keeping.print_index();
         String::from_utf8_lossy(&self.data).to_string()
     }
 
-    /// Amount of elements in buffer
+    /// Returns an iterator over the elements
+    #[inline]
+    pub fn iter(&self) -> Iter<T> {
+        Iter {
+            data: &self.data,
+            len: self.len(),
+            iter_book: self.book_keeping.iter()
+        }
+    }
+
+    /// Total amount of inserted elements
     pub fn elements(&self) -> usize {
         self.elements
     }
 
-    /// Amount of used bytes in buffer, including metadata
+    /// Amount of entries in buffer, including metadata
+    #[inline]
     pub fn len(&self) -> usize {
-        self.tail
+        self.book_keeping.len()
+    }
+
+    /// Capacity of lines
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.book_keeping.capacity()
+    }
+
+    /// Capacity of total bytes
+    /// 
+    /// Note that due to fragmentation it is not 
+    /// trivially possible to get the amount of free bytes
+    #[inline]
+    pub fn capacity_bytes(&self) -> usize {
+        self.data.len()
     }
 
     // Get element at index
@@ -126,7 +189,7 @@ where
         if self.elements <= idx {
             return None;
         }
-        if self.elements - self.book_keeping.size() > idx {
+        if self.elements - self.book_keeping.capacity() > idx {
             return None;
         }
         let entry = self.book_keeping.get(idx, self.elements());
@@ -143,7 +206,7 @@ where
         let e_len = element.len();
         let offset;
         let length = e_len;
-        if self.tail + e_len > self.data.len() {
+        if self.tail + e_len > self.capacity_bytes() {
             offset = 0;
             self.tail = length;
         } else {
@@ -207,10 +270,4 @@ fn insert_overflow_full() {
     for i in 100..200 {
         assert_eq!(buffer.get(i), None);
     }
-}
-
-#[test]
-fn buffer_wraps() {
-    // let mut buffer = LineBuffer::new(20);
-    // buffer.insert("foo".as_bytes(), 0);
 }
