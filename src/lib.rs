@@ -3,7 +3,7 @@ use ::std::iter::Iterator;
 use arraydeque::{self, ArrayDeque, Wrapping};
 pub use generic_array::typenum;
 use generic_array::{ArrayLength, GenericArray};
-/// Circular
+/// Circular Line Buffer
 pub struct LineBuffer<T, B>
 where
     T: Debug,
@@ -81,6 +81,7 @@ where
         self.index.len()
     }
 
+    #[inline]
     fn append(&mut self, addition: T, start: usize, length: usize) {
         self.index.push_back(Entry {
             start,
@@ -90,12 +91,18 @@ where
         });
     }
 
+    #[inline]
     fn get(&self, idx: usize, current_max: usize) -> Option<&Entry<T>> {
-        let min = current_max - self.index.capacity();
+        // calculate total position based on "floating window" of elements in buffer
+        let min = match current_max < self.index.capacity() {
+            true => 0, // no wrap till now
+            false => current_max - self.index.capacity(),
+        };
         let pos = if idx >= min { idx - min } else { idx };
         self.index.get(pos)
     }
 
+    #[inline]
     fn invalidate_until(&mut self, start: usize, length: usize) {
         let end = start + length;
         let mut found = false;
@@ -129,9 +136,10 @@ where
     T: Debug,
     B: ArrayLength<Entry<T>>,
 {
-    /// Create new circular buffer of defined size (bytes)
-    ///
-    /// Note that the capacity includes book keeping
+    /// Create new circular buffer of defined data size (bytes)
+    /// 
+    /// Note that this is not the amount of lines (entries).
+    /// LineBuffer will wrap after reaching max bytes or the max amount of lines specified.
     pub fn new(max: usize) -> Self {
         Self {
             data: vec![0; max],
@@ -184,12 +192,14 @@ where
         self.data.len()
     }
 
-    // Get element at index
+    // Get element at index, idx counting up since first element inserted.
     pub fn get(&self, idx: usize) -> Option<&[u8]> {
+        // idx > seen lines
         if self.elements <= idx {
             return None;
         }
-        if self.elements - self.book_keeping.capacity() > idx {
+        // idx < min elements
+        if self.elements() > self.book_keeping.capacity() && self.elements - self.book_keeping.capacity() > idx {
             return None;
         }
         let entry = self.book_keeping.get(idx, self.elements());
@@ -270,4 +280,47 @@ fn insert_overflow_full() {
     for i in 100..200 {
         assert_eq!(buffer.get(i), None);
     }
+}
+
+#[test]
+fn insert_elements_less_capacity() {
+    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(8);
+    for i in 0..4 {
+        // use two byte entries
+        buffer.insert(format!("{}",i+10).as_bytes(), ());
+    }
+    for i in 0..4 {
+        assert_eq!(buffer.get(i), Some(format!("{}",i+10).as_bytes()));
+    }
+    assert_eq!(buffer.get(4), None);
+}
+
+// found underflow in BookKeeping::get window calc
+#[test]
+fn insert_elements_uneven_capacity() {
+    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
+    for i in 0..4 {
+        // use two byte entries
+        buffer.insert(format!("{}",i+10).as_bytes(), ());
+    }
+    for i in 0..4 {
+        assert_eq!(buffer.get(i), Some(format!("{}",i+10).as_bytes()));
+    }
+    assert_eq!(buffer.get(4), None);
+}
+
+#[test]
+fn insert_elements_uneven_capacity_wrap() {
+    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
+    for i in 0..8 {
+        // use two byte entries
+        buffer.insert(format!("{}",i+10).as_bytes(), ());
+    }
+    for i in 0..4 {
+        assert_eq!(buffer.get(i), None);
+    }
+    for i in 4..8 {
+        assert_eq!(buffer.get(i), Some(format!("{}",i+10).as_bytes()));
+    }
+    assert_eq!(buffer.get(8), None);
 }
