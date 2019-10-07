@@ -18,11 +18,10 @@ fn perf_simple() {
         start.elapsed().as_nanos(),
         max
     );
-    let input = buffer
+    let (data,_) = buffer
         .get(((max - 1) as u32).try_into().unwrap())
-        .unwrap()
-        .to_owned();
-    let (int_bytes, _) = input.split_at(std::mem::size_of::<u32>());
+        .unwrap();
+    let (int_bytes, _) = data.split_at(std::mem::size_of::<u32>());
     let data = u32::from_le_bytes(int_bytes.try_into().unwrap());
     println!("entries {:?} {:?}", buffer.get(0), data);
 }

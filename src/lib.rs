@@ -183,7 +183,7 @@ where
     }
 
     // Get element at index, idx counting up since first element inserted.
-    pub fn get(&self, idx: usize) -> Option<&[u8]> {
+    pub fn get(&self, idx: usize) -> Option<(&[u8],&T)> {
         // idx > seen lines
         if self.elements <= idx {
             return None;
@@ -207,7 +207,7 @@ where
                 // let start = entry.start - (self.written_bytes - self.capacity_bytes());
                 let start = entry.start % self.capacity_bytes();
                 // dbg!(start);
-                return Some(&self.data[start..start + entry.length]);
+                return Some((&self.data[start..start + entry.length],&entry.addition));
             }
         }
         None
@@ -238,13 +238,13 @@ where
 fn insert_simple() {
     let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
     for i in 0..8 {
-        buffer.insert(format!("{}", i).as_bytes(), 0);
+        buffer.insert(format!("{}", i).as_bytes(), i);
     }
     // dbg!(String::from_utf8_lossy(buffer.get(0).unwrap()));
     for i in 0..8 {
         // dbg!(i);
         // dbg!(buffer.get(i));
-        assert_eq!(buffer.get(i), Some(format!("{}", i).as_bytes()));
+        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(),&(i as i32))));
     }
     assert_eq!(buffer.get(8), None);
 }
@@ -253,14 +253,14 @@ fn insert_simple() {
 fn insert_overflow_index() {
     let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
     for i in 0..8 {
-        buffer.insert(format!("{}", i).as_bytes(), 0);
+        buffer.insert(format!("{}", i).as_bytes(), i);
     }
-    buffer.insert(format!("{}", 8).as_bytes(), 0);
+    buffer.insert(format!("{}", 8).as_bytes(), 8);
     assert_eq!(buffer.get(0), None);
-    assert_eq!(buffer.get(1), Some(format!("{}", 1).as_bytes()));
+    assert_eq!(buffer.get(1), Some((format!("{}", 1).as_bytes(),&1)));
     for i in 1..9 {
         // dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
-        assert_eq!(buffer.get(i), Some(format!("{}", i).as_bytes()));
+        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(),&(i as i32))));
     }
 }
 
@@ -278,7 +278,7 @@ fn insert_overflow_full() {
     // dbg!(buffer.get_all_data());
     for i in 96..100 {
         // dbg!(i);
-        assert_eq!(buffer.get(i), Some(format!("{}", i).as_bytes()));
+        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(),&())));
     }
     for i in 100..200 {
         assert_eq!(buffer.get(i), None);
@@ -293,7 +293,7 @@ fn insert_elements_less_capacity() {
         buffer.insert(format!("{}", i + 10).as_bytes(), ());
     }
     for i in 0..4 {
-        assert_eq!(buffer.get(i), Some(format!("{}", i + 10).as_bytes()));
+        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(),&())));
     }
     assert_eq!(buffer.get(4), None);
 }
@@ -307,7 +307,7 @@ fn insert_elements_uneven_capacity() {
         buffer.insert(format!("{}", i + 10).as_bytes(), ());
     }
     for i in 0..4 {
-        assert_eq!(buffer.get(i), Some(format!("{}", i + 10).as_bytes()));
+        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(),&())));
     }
     assert_eq!(buffer.get(4), None);
 }
@@ -323,7 +323,7 @@ fn insert_elements_uneven_capacity_wrap() {
         assert_eq!(buffer.get(i), None);
     }
     for i in 4..8 {
-        assert_eq!(buffer.get(i), Some(format!("{}", i + 10).as_bytes()));
+        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(),&())));
     }
     assert_eq!(buffer.get(8), None);
 }
@@ -334,13 +334,14 @@ fn insert_empty() {
     buffer.insert(format!("{}",21).as_bytes(),());
     let empty = [0; 0];
     buffer.insert(&empty, ());
-    assert_eq!(buffer.get(0), Some(format!("{}", 21).as_bytes()));
-    assert_eq!(buffer.get(1), Some(&empty[0..0]));
+    assert_eq!(buffer.get(0), Some((format!("{}", 21).as_bytes(),&())));
+    assert_eq!(buffer.get(1), Some((&empty[0..0],&())));
 }
 
 #[test]
 fn iter_test() {
-    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
-    for i in 0..
-    buffer.insert(format!("{}"))
+    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+    for i in 0..8 {
+        buffer.insert(format!("{}",i).as_bytes(), i);
+    }
 }
