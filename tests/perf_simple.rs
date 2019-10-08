@@ -12,18 +12,23 @@ fn perf_simple() {
     for i in 0..max {
         buffer.insert(&i.to_ne_bytes(), ());
     }
+    let nanos = start.elapsed().as_nanos();
     assert_eq!(buffer.capacity_bytes(), AMOUNT);
     println!(
         "Duration: {} ns for {} entries",
-        start.elapsed().as_nanos(),
+        nanos,
         max
     );
-    let (data,_) = buffer
-        .get(((max - 1) as u32).try_into().unwrap())
-        .unwrap();
-    let (int_bytes, _) = data.split_at(std::mem::size_of::<u32>());
-    let data = u32::from_le_bytes(int_bytes.try_into().unwrap());
-    println!("entries {:?} {:?}", buffer.get(0), data);
+
+    let bytes: u128 = (max * 4) as u128;
+    let ms = nanos / 1_000_000;
+    println!("{} Byte in, {} B/ms",bytes, (bytes / ms) );
+
+    let expected: u32 = max -1;
+    assert_eq!(
+        buffer.get((max-1) as usize),
+        Some((&(expected.to_ne_bytes()[..]),&()))
+    );
 }
 
 #[test]

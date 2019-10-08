@@ -22,20 +22,49 @@ where
 #[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct Iter<'a, T: Debug> {
     len: usize,
+    capacity: usize,
+    written_bytes: usize,
+    first_run: bool,
     data: &'a [u8],
     iter_book: arraydeque::Iter<'a, Entry<T>>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T>
 where
-    T: Debug,
+    T: Debug
 {
-    type Item = &'a [u8];
+    type Item = (&'a [u8], &'a T);
 
     #[inline]
-    fn next(&mut self) -> Option<&'a [u8]> {
-        if let Some(entry) = self.iter_book.next() {
-            return Some(&self.data[entry.start..entry.start + entry.length]);
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut next;
+        if self.first_run {
+            if self.written_bytes >= self.capacity {
+                loop {
+                    next = self.iter_book.next();
+                    match next {
+                        Some(entry) => {
+                            if entry.start >= self.written_bytes - self.capacity {
+                                break;
+                            }
+                        },
+                        None => break,
+                    }
+                }
+            } else {
+                next = self.iter_book.next();
+            }
+            self.first_run = true;
+        } else {
+            next = self.iter_book.next();
+        }
+
+        if let Some(entry) = next {
+            let start = entry.start % self.capacity;
+            return Some((
+                &self.data[start..start + entry.length],
+                &entry.addition,
+            ));
         }
         None
     }
@@ -152,7 +181,10 @@ where
         Iter {
             data: &self.data,
             len: self.len(),
+            first_run: true,
+            written_bytes: self.written_bytes,
             iter_book: self.book_keeping.iter(),
+            capacity: self.capacity_bytes(),
         }
     }
 
@@ -183,7 +215,7 @@ where
     }
 
     // Get element at index, idx counting up since first element inserted.
-    pub fn get(&self, idx: usize) -> Option<(&[u8],&T)> {
+    pub fn get(&self, idx: usize) -> Option<(&[u8], &T)> {
         // idx > seen lines
         if self.elements <= idx {
             return None;
@@ -195,19 +227,15 @@ where
             return None;
         }
         let entry = self.book_keeping.get(idx, self.elements());
-        // dbg!(entry);
         if let Some(entry) = entry {
             // by checking that it is contained in let n = total_byte_count_written_into_ringbuffer; [n - buffer_size, n)
-            // dbg!(idx);
-            // dbg!(entry.start);
-            // dbg!(self.written_bytes);
-            // dbg!(self.capacity_bytes());
             // prevent underflow when writteb_bytes < capacity, otherwise check withing range
-            if self.written_bytes < self.capacity_bytes() || entry.start >= self.written_bytes - self.capacity_bytes() {
+            if self.written_bytes < self.capacity_bytes()
+                || entry.start >= self.written_bytes - self.capacity_bytes()
+            {
                 // let start = entry.start - (self.written_bytes - self.capacity_bytes());
                 let start = entry.start % self.capacity_bytes();
-                // dbg!(start);
-                return Some((&self.data[start..start + entry.length],&entry.addition));
+                return Some((&self.data[start..start + entry.length], &entry.addition));
             }
         }
         None
@@ -228,7 +256,8 @@ where
             self.tail += e_len;
         }
         self.data[offset..self.tail].copy_from_slice(element);
-        self.book_keeping.append(addition, self.written_bytes, e_len);
+        self.book_keeping
+            .append(addition, self.written_bytes, e_len);
         self.elements += 1;
         self.written_bytes += e_len;
     }
@@ -240,11 +269,11 @@ fn insert_simple() {
     for i in 0..8 {
         buffer.insert(format!("{}", i).as_bytes(), i);
     }
-    // dbg!(String::from_utf8_lossy(buffer.get(0).unwrap()));
     for i in 0..8 {
-        // dbg!(i);
-        // dbg!(buffer.get(i));
-        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(),&(i as i32))));
+        assert_eq!(
+            buffer.get(i),
+            Some((format!("{}", i).as_bytes(), &(i as i32)))
+        );
     }
     assert_eq!(buffer.get(8), None);
 }
@@ -257,11 +286,32 @@ fn insert_overflow_index() {
     }
     buffer.insert(format!("{}", 8).as_bytes(), 8);
     assert_eq!(buffer.get(0), None);
-    assert_eq!(buffer.get(1), Some((format!("{}", 1).as_bytes(),&1)));
+    assert_eq!(buffer.get(1), Some((format!("{}", 1).as_bytes(), &1)));
     for i in 1..9 {
-        // dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
-        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(),&(i as i32))));
+        assert_eq!(
+            buffer.get(i),
+            Some((format!("{}", i).as_bytes(), &(i as i32)))
+        );
     }
+}
+
+// test cornercase from 1 -> 2 bytes of data where the written_bytes check doesn't work
+#[test]
+fn insert_overflow_border() {
+    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+    for i in 0..12 {
+        buffer.insert(format!("{}", i).as_bytes(), i);
+    }
+    // dbg!(buffer.get_all_data());
+    // buffer content: 910115678, idx < min elements has to prevent this
+    for i in 0..5 {
+        assert_eq!(buffer.get(i), None);
+    }
+
+    for i in 5..12 {
+        assert_eq!(buffer.get(i), Some((format!("{}",i).as_bytes(),&(i as i32))));
+    }
+    assert_eq!(buffer.get(12), None);
 }
 
 #[test]
@@ -271,14 +321,10 @@ fn insert_overflow_full() {
         buffer.insert(format!("{}", i).as_bytes(), ());
     }
     for i in 1..96 {
-        // dbg!(String::from_utf8_lossy(buffer.get(i).unwrap()));
-        // dbg!(i);
         assert_eq!(buffer.get(i), None);
     }
-    // dbg!(buffer.get_all_data());
     for i in 96..100 {
-        // dbg!(i);
-        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(),&())));
+        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(), &())));
     }
     for i in 100..200 {
         assert_eq!(buffer.get(i), None);
@@ -293,7 +339,7 @@ fn insert_elements_less_capacity() {
         buffer.insert(format!("{}", i + 10).as_bytes(), ());
     }
     for i in 0..4 {
-        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(),&())));
+        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
     }
     assert_eq!(buffer.get(4), None);
 }
@@ -307,7 +353,7 @@ fn insert_elements_uneven_capacity() {
         buffer.insert(format!("{}", i + 10).as_bytes(), ());
     }
     for i in 0..4 {
-        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(),&())));
+        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
     }
     assert_eq!(buffer.get(4), None);
 }
@@ -323,7 +369,7 @@ fn insert_elements_uneven_capacity_wrap() {
         assert_eq!(buffer.get(i), None);
     }
     for i in 4..8 {
-        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(),&())));
+        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
     }
     assert_eq!(buffer.get(8), None);
 }
@@ -331,17 +377,39 @@ fn insert_elements_uneven_capacity_wrap() {
 #[test]
 fn insert_empty() {
     let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
-    buffer.insert(format!("{}",21).as_bytes(),());
+    buffer.insert(format!("{}", 21).as_bytes(), ());
     let empty = [0; 0];
     buffer.insert(&empty, ());
-    assert_eq!(buffer.get(0), Some((format!("{}", 21).as_bytes(),&())));
-    assert_eq!(buffer.get(1), Some((&empty[0..0],&())));
+    assert_eq!(buffer.get(0), Some((format!("{}", 21).as_bytes(), &())));
+    assert_eq!(buffer.get(1), Some((&empty[0..0], &())));
 }
 
 #[test]
-fn iter_test() {
+fn iter_test_simple() {
     let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
     for i in 0..8 {
-        buffer.insert(format!("{}",i).as_bytes(), i);
+        buffer.insert(format!("{}", i).as_bytes(), i);
     }
+    let mut i: i32 = 0;
+    for (data, flag) in buffer.iter() {
+        assert_eq!(data, format!("{}", i).as_bytes());
+        assert_eq!(*flag,i);
+        i += 1;
+    }
+    assert_eq!(i,8);
+}
+
+#[test]
+fn iter_test_wrap() {
+    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+    for i in 0..16 {
+        buffer.insert(format!("{}", i).as_bytes(), i);
+    }
+    let mut i: i32 = 12;
+    for (data, flag) in buffer.iter() {
+        assert_eq!(*flag,i);
+        assert_eq!(data, format!("{}", i).as_bytes());
+        i += 1;
+    }
+    assert_eq!(i,16);
 }
