@@ -31,7 +31,7 @@ pub struct Iter<'a, T: Debug> {
 
 impl<'a, T> Iterator for Iter<'a, T>
 where
-    T: Debug
+    T: Debug,
 {
     type Item = (&'a [u8], &'a T);
 
@@ -47,7 +47,7 @@ where
                             if entry.start >= self.written_bytes - self.capacity {
                                 break;
                             }
-                        },
+                        }
                         None => break,
                     }
                 }
@@ -61,10 +61,7 @@ where
 
         if let Some(entry) = next {
             let start = entry.start % self.capacity;
-            return Some((
-                &self.data[start..start + entry.length],
-                &entry.addition,
-            ));
+            return Some((&self.data[start..start + entry.length], &entry.addition));
         }
         None
     }
@@ -309,7 +306,10 @@ fn insert_overflow_border() {
     }
 
     for i in 5..12 {
-        assert_eq!(buffer.get(i), Some((format!("{}",i).as_bytes(),&(i as i32))));
+        assert_eq!(
+            buffer.get(i),
+            Some((format!("{}", i).as_bytes(), &(i as i32)))
+        );
     }
     assert_eq!(buffer.get(12), None);
 }
@@ -393,10 +393,10 @@ fn iter_test_simple() {
     let mut i: i32 = 0;
     for (data, flag) in buffer.iter() {
         assert_eq!(data, format!("{}", i).as_bytes());
-        assert_eq!(*flag,i);
+        assert_eq!(*flag, i);
         i += 1;
     }
-    assert_eq!(i,8);
+    assert_eq!(i, 8);
 }
 
 #[test]
@@ -407,9 +407,9 @@ fn iter_test_wrap() {
     }
     let mut i: i32 = 12;
     for (data, flag) in buffer.iter() {
-        assert_eq!(*flag,i);
+        assert_eq!(*flag, i);
         assert_eq!(data, format!("{}", i).as_bytes());
         i += 1;
     }
-    assert_eq!(i,16);
+    assert_eq!(i, 16);
 }

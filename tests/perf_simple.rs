@@ -14,20 +14,16 @@ fn perf_simple() {
     }
     let nanos = start.elapsed().as_nanos();
     assert_eq!(buffer.capacity_bytes(), AMOUNT);
-    println!(
-        "Duration: {} ns for {} entries",
-        nanos,
-        max
-    );
+    println!("Duration: {} ns for {} entries", nanos, max);
 
-    let bytes: u128 = (max * 4) as u128;
-    let ms = nanos / 1_000_000;
-    println!("{} Byte in, {} B/ms",bytes, (bytes / ms) );
+    // let bytes: u128 = (max * 4) as u128;
+    // let ms = nanos / 1_000_000;
+    // println!("{} Byte in, {} B/ms",bytes, (bytes / ms) );
 
-    let expected: u32 = max -1;
+    let expected: u32 = max - 1;
     assert_eq!(
-        buffer.get((max-1) as usize),
-        Some((&(expected.to_ne_bytes()[..]),&()))
+        buffer.get((max - 1) as usize),
+        Some((&(expected.to_ne_bytes()[..]), &()))
     );
 }
 
