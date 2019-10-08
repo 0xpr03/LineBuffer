@@ -5,6 +5,8 @@ authors = ["Aron Heinecke <aron.heinecke@t-online.de>"]
 edition = "2018"
 keywords = ["ring", "buffer"]
 repository = "https://github.com/0xpr03/LineBuffer"
+description = "ringbuffer for dynamic sized u8-elements"
+license = "MIT/Apache-2.0"
 
 [dependencies]
 arraydeque = {features= ["use_generic_array"], version = "0.4" }
