@@ -5,7 +5,7 @@ use std::time::*;
 #[test]
 #[ignore]
 fn perf_simple() {
-    const AMOUNT: usize = 512_000;
+    const AMOUNT: usize = 8192;
     let mut buffer: LineBuffer<(), typenum::U2048> = LineBuffer::new(AMOUNT);
     let start = Instant::now();
     let max: u32 = 1_000_000_000;
@@ -25,6 +25,22 @@ fn perf_simple() {
         buffer.get((max - 1) as usize),
         Some((&(expected.to_ne_bytes()[..]), &()))
     );
+}
+
+#[test]
+#[ignore]
+fn perf_lines() {
+    const AMOUNT: usize = 1024;
+    let mut buffer: LineBuffer<(), typenum::U1024> = LineBuffer::new(AMOUNT);
+    let start = Instant::now();
+    let max: u32 = 1_000_000_000;
+    let empty = [0; 0];
+    for _ in 0..max {
+        buffer.insert(&empty, ());
+    }
+    let nanos = start.elapsed().as_nanos();
+    assert_eq!(buffer.capacity_bytes(), AMOUNT);
+    println!("Duration: {} ns for {} entries", nanos, max);
 }
 
 #[test]

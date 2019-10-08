@@ -21,11 +21,11 @@ where
 
 #[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct Iter<'a, T: Debug> {
-    len: usize,
     capacity: usize,
     written_bytes: usize,
     first_run: bool,
     data: &'a [u8],
+    len: usize,
     iter_book: arraydeque::Iter<'a, Entry<T>>,
 }
 
@@ -68,7 +68,7 @@ where
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len, Some(self.len))
+        (self.len / 2, Some(self.len))
     }
 }
 
@@ -99,6 +99,14 @@ where
         dbg!(&self.index);
     }
 
+    /// Upper bound amount of items
+    /// 
+    /// Real value varies depending on amount of valid entries
+    #[inline]
+    fn length_max(&self) -> usize {
+        self.index.len()
+    }
+
     #[inline]
     fn iter(&self) -> arraydeque::Iter<Entry<T>> {
         self.index.iter()
@@ -107,11 +115,6 @@ where
     #[inline]
     pub fn capacity(&self) -> usize {
         self.index.capacity()
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.index.len()
     }
 
     #[inline]
@@ -126,9 +129,10 @@ where
     #[inline]
     fn get(&self, idx: usize, current_max: usize) -> Option<&Entry<T>> {
         // calculate total position based on "floating window" of elements in buffer
-        let min = match current_max < self.index.capacity() {
-            true => 0, // no wrap till now
-            false => current_max - self.index.capacity(),
+        let min = if current_max < self.index.capacity() {
+            0 // no wrap till now
+        } else {
+            current_max - self.index.capacity()
         };
         let pos = if idx >= min { idx - min } else { idx };
         self.index.get(pos)
@@ -177,8 +181,8 @@ where
     pub fn iter(&self) -> Iter<T> {
         Iter {
             data: &self.data,
-            len: self.len(),
             first_run: true,
+            len: self.book_keeping.length_max(),
             written_bytes: self.written_bytes,
             iter_book: self.book_keeping.iter(),
             capacity: self.capacity_bytes(),
@@ -188,12 +192,6 @@ where
     /// Total amount of inserted elements
     pub fn elements(&self) -> usize {
         self.elements
-    }
-
-    /// Amount of entries in buffer, including metadata
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.book_keeping.len()
     }
 
     /// Capacity of lines
