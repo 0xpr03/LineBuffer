@@ -1,5 +1,6 @@
 [package]
 name = "linebuffer"
+readme = "README.md"
 version = "0.1.1"
 authors = ["Aron Heinecke <aron.heinecke@t-online.de>"]
 edition = "2018"

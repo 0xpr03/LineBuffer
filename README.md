@@ -1,5 +1,9 @@
 #### LineBuffer - ringbuffer but for elements of different sizes
 
+[![crates.io](https://img.shields.io/crates/v/linebuffer.svg)](https://crates.io/crates/linebuffer)
+[![docs.rs](https://docs.rs/linebuffer/badge.svg)](https://docs.rs/linebuffer)
+[![Build Status](https://travis-ci.com/0xpr03/linebuffer.svg?branch=master)](https://travis-ci.com/0xpr03/linebuffer)
+
 This crate is specifically for the following use case:
 
 - high throughput of data
