@@ -1,3 +1,31 @@
+//! # linebuffer
+//!
+//! A circular-/ringbuffer for dynamic sized elements.
+//!
+//! It's created specifically for storing line-like data in a upcounting fashion.
+//!
+//! ## Example
+//!
+//! ```rust
+//! use linebuffer::{typenum, LineBuffer};
+//!
+//! // create a buffer of max 2048 entries/lines and 512KB data cache
+//! // with the additional flag type ()
+//! let mut buffer: LineBuffer<(), typenum::U2048> = LineBuffer::new(512_000);
+//!
+//! let data = String::from("Some data stuff");
+//! buffer.insert(data.as_bytes(),());
+//! assert_eq!(buffer.get(0),Some((data.as_bytes(), &())));
+//! ```
+//!
+//! ## Details
+//!
+//! When creating a linebuffer the amount of elements(lines) and the data size is specified.  
+//! This means for 8 elements and a data size of 16 the buffer will wrap when either 8 elements or more than 16 bytes were written.
+//! If we would insert 8 elements of 4 bytes, our buffer would thus already wrap after 4 elements.
+//!
+//! Please note that the element amount is stack allocated currently. Consequently setting a high amount of elements can lead to stack overflow.
+//!
 use ::std::fmt::Debug;
 use ::std::iter::Iterator;
 use arraydeque::{self, ArrayDeque, Wrapping};
@@ -19,6 +47,9 @@ where
     written_bytes: usize,
 }
 
+/// Iterator over entries in LineBuffer
+///
+/// Created by calling .iter() on LineBuffer
 #[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 pub struct Iter<'a, T: Debug> {
     capacity: usize,
@@ -100,7 +131,7 @@ where
     }
 
     /// Upper bound amount of items
-    /// 
+    ///
     /// Real value varies depending on amount of valid entries
     #[inline]
     fn length_max(&self) -> usize {
@@ -112,6 +143,7 @@ where
         self.index.iter()
     }
 
+    /// Capacity of elements that can be hold.
     #[inline]
     pub fn capacity(&self) -> usize {
         self.index.capacity()
@@ -139,7 +171,7 @@ where
     }
 }
 
-// not supposed to be public..
+/// Implementation detail, currently leaked by generic declaration
 #[derive(Debug)]
 pub struct Entry<T>
 where
@@ -157,7 +189,7 @@ where
 {
     /// Create new circular buffer of defined data size (bytes)
     ///
-    /// Note that this is not the amount of lines (entries).
+    /// Note that this is not the amount of entries (lines).
     /// LineBuffer will wrap after reaching max bytes or the max amount of lines specified.
     pub fn new(max: usize) -> Self {
         Self {
@@ -177,6 +209,8 @@ where
     }
 
     /// Returns an iterator over the elements
+    ///
+    /// Note that the first iteration step has some overhead to skip invalid entries.
     #[inline]
     pub fn iter(&self) -> Iter<T> {
         Iter {
@@ -194,7 +228,7 @@ where
         self.elements
     }
 
-    /// Capacity of lines
+    /// Capacity of elements (lines)
     #[inline]
     pub fn capacity(&self) -> usize {
         self.book_keeping.capacity()
@@ -209,7 +243,7 @@ where
         self.data.len()
     }
 
-    // Get element at index, idx counting up since first element inserted.
+    /// Get element at index, idx counting up since first element inserted.
     pub fn get(&self, idx: usize) -> Option<(&[u8], &T)> {
         // idx > seen lines
         if self.elements <= idx {
@@ -236,7 +270,7 @@ where
         None
     }
 
-    /// Insert element and an additional value, can be used as flag
+    /// Insert element at the front and an additional value, which can be used as flag
     pub fn insert(&mut self, element: &[u8], addition: T) {
         let e_len = element.len();
         let offset;

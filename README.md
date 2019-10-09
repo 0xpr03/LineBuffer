@@ -22,5 +22,5 @@ let mut buffer: LineBuffer<(), typenum::U2048> = LineBuffer::new(512_000);
 
 let data = String::from("Some data stuff");
 buffer.insert(data.as_bytes(),());
-assert_eq!((buffer.get(0),Some(data.as_bytes(), &())));
+assert_eq!(buffer.get(0),Some((data.as_bytes(), &())));
 ```
