@@ -54,7 +54,6 @@ where
 pub struct Iter<'a, T: Debug> {
     capacity: usize,
     written_bytes: usize,
-    first_run: bool,
     data: &'a [u8],
     len: usize,
     iter_book: arraydeque::Iter<'a, Entry<T>>,
@@ -68,33 +67,17 @@ where
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let mut next;
-        if self.first_run {
-            if self.written_bytes >= self.capacity {
-                loop {
-                    next = self.iter_book.next();
-                    match next {
-                        Some(entry) => {
-                            if entry.start >= self.written_bytes - self.capacity {
-                                break;
-                            }
-                        }
-                        None => break,
-                    }
-                }
-            } else {
-                next = self.iter_book.next();
+        let mut entry = self.iter_book.next()?;
+
+        if self.written_bytes >= self.capacity {
+            while entry.start < self.written_bytes - self.capacity {
+                entry = self.iter_book.next()?;
             }
-            self.first_run = true;
-        } else {
-            next = self.iter_book.next();
         }
 
-        if let Some(entry) = next {
-            let start = entry.start % self.capacity;
-            return Some((&self.data[start..start + entry.length], &entry.addition));
-        }
-        None
+        let start = entry.start % self.capacity;
+
+        Some((&self.data[start..start + entry.length], &entry.addition))
     }
 
     #[inline]
@@ -215,7 +198,6 @@ where
     pub fn iter(&self) -> Iter<T> {
         Iter {
             data: &self.data,
-            first_run: true,
             len: self.book_keeping.length_max(),
             written_bytes: self.written_bytes,
             iter_book: self.book_keeping.iter(),
