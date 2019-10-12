@@ -31,6 +31,7 @@ use ::std::iter::Iterator;
 use arraydeque::{self, ArrayDeque, Wrapping};
 pub use generic_array::typenum;
 use generic_array::{ArrayLength, GenericArray};
+
 /// Circular Line Buffer
 pub struct LineBuffer<T, B>
 where
@@ -292,156 +293,161 @@ where
     }
 }
 
-#[test]
-fn insert_simple() {
-    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
-    for i in 0..8 {
-        buffer.insert(format!("{}", i).as_bytes(), i);
-    }
-    for i in 0..8 {
-        assert_eq!(
-            buffer.get(i),
-            Some((format!("{}", i).as_bytes(), &(i as i32)))
-        );
-    }
-    assert_eq!(buffer.get(8), None);
-}
+#[cfg(test)]
+mod tests {
+    use super::{typenum, LineBuffer};
 
-#[test]
-fn insert_overflow_index() {
-    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
-    for i in 0..8 {
-        buffer.insert(format!("{}", i).as_bytes(), i);
-    }
-    buffer.insert(format!("{}", 8).as_bytes(), 8);
-    assert_eq!(buffer.get(0), None);
-    assert_eq!(buffer.get(1), Some((format!("{}", 1).as_bytes(), &1)));
-    for i in 1..9 {
-        assert_eq!(
-            buffer.get(i),
-            Some((format!("{}", i).as_bytes(), &(i as i32)))
-        );
-    }
-}
-
-// test cornercase from 1 -> 2 bytes of data where the written_bytes check doesn't work
-#[test]
-fn insert_overflow_border() {
-    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
-    for i in 0..12 {
-        buffer.insert(format!("{}", i).as_bytes(), i);
-    }
-    // dbg!(buffer.get_all_data());
-    // buffer content: 910115678, idx < min elements has to prevent this
-    for i in 0..5 {
-        assert_eq!(buffer.get(i), None);
+    #[test]
+    fn insert_simple() {
+        let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
+        for i in 0..8 {
+            buffer.insert(format!("{}", i).as_bytes(), i);
+        }
+        for i in 0..8 {
+            assert_eq!(
+                buffer.get(i),
+                Some((format!("{}", i).as_bytes(), &(i as i32)))
+            );
+        }
+        assert_eq!(buffer.get(8), None);
     }
 
-    for i in 5..12 {
-        assert_eq!(
-            buffer.get(i),
-            Some((format!("{}", i).as_bytes(), &(i as i32)))
-        );
+    #[test]
+    fn insert_overflow_index() {
+        let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(8);
+        for i in 0..8 {
+            buffer.insert(format!("{}", i).as_bytes(), i);
+        }
+        buffer.insert(format!("{}", 8).as_bytes(), 8);
+        assert_eq!(buffer.get(0), None);
+        assert_eq!(buffer.get(1), Some((format!("{}", 1).as_bytes(), &1)));
+        for i in 1..9 {
+            assert_eq!(
+                buffer.get(i),
+                Some((format!("{}", i).as_bytes(), &(i as i32)))
+            );
+        }
     }
-    assert_eq!(buffer.get(12), None);
-}
 
-#[test]
-fn insert_overflow_full() {
-    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(8);
-    for i in 0..100 {
-        buffer.insert(format!("{}", i).as_bytes(), ());
-    }
-    for i in 1..96 {
-        assert_eq!(buffer.get(i), None);
-    }
-    for i in 96..100 {
-        assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(), &())));
-    }
-    for i in 100..200 {
-        assert_eq!(buffer.get(i), None);
-    }
-}
+    // test cornercase from 1 -> 2 bytes of data where the written_bytes check doesn't work
+    #[test]
+    fn insert_overflow_border() {
+        let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+        for i in 0..12 {
+            buffer.insert(format!("{}", i).as_bytes(), i);
+        }
+        // dbg!(buffer.get_all_data());
+        // buffer content: 910115678, idx < min elements has to prevent this
+        for i in 0..5 {
+            assert_eq!(buffer.get(i), None);
+        }
 
-#[test]
-fn insert_elements_less_capacity() {
-    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(8);
-    for i in 0..4 {
-        // use two byte entries
-        buffer.insert(format!("{}", i + 10).as_bytes(), ());
+        for i in 5..12 {
+            assert_eq!(
+                buffer.get(i),
+                Some((format!("{}", i).as_bytes(), &(i as i32)))
+            );
+        }
+        assert_eq!(buffer.get(12), None);
     }
-    for i in 0..4 {
-        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
-    }
-    assert_eq!(buffer.get(4), None);
-}
 
-// found underflow in BookKeeping::get window calc
-#[test]
-fn insert_elements_uneven_capacity() {
-    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
-    for i in 0..4 {
-        // use two byte entries
-        buffer.insert(format!("{}", i + 10).as_bytes(), ());
+    #[test]
+    fn insert_overflow_full() {
+        let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(8);
+        for i in 0..100 {
+            buffer.insert(format!("{}", i).as_bytes(), ());
+        }
+        for i in 1..96 {
+            assert_eq!(buffer.get(i), None);
+        }
+        for i in 96..100 {
+            assert_eq!(buffer.get(i), Some((format!("{}", i).as_bytes(), &())));
+        }
+        for i in 100..200 {
+            assert_eq!(buffer.get(i), None);
+        }
     }
-    for i in 0..4 {
-        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
-    }
-    assert_eq!(buffer.get(4), None);
-}
 
-#[test]
-fn insert_elements_uneven_capacity_wrap() {
-    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
-    for i in 0..8 {
-        // use two byte entries
-        buffer.insert(format!("{}", i + 10).as_bytes(), ());
+    #[test]
+    fn insert_elements_less_capacity() {
+        let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(8);
+        for i in 0..4 {
+            // use two byte entries
+            buffer.insert(format!("{}", i + 10).as_bytes(), ());
+        }
+        for i in 0..4 {
+            assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
+        }
+        assert_eq!(buffer.get(4), None);
     }
-    for i in 0..4 {
-        assert_eq!(buffer.get(i), None);
-    }
-    for i in 4..8 {
-        assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
-    }
-    assert_eq!(buffer.get(8), None);
-}
 
-#[test]
-fn insert_empty() {
-    let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
-    buffer.insert(format!("{}", 21).as_bytes(), ());
-    let empty = [0; 0];
-    buffer.insert(&empty, ());
-    assert_eq!(buffer.get(0), Some((format!("{}", 21).as_bytes(), &())));
-    assert_eq!(buffer.get(1), Some((&empty[0..0], &())));
-}
+    // found underflow in BookKeeping::get window calc
+    #[test]
+    fn insert_elements_uneven_capacity() {
+        let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
+        for i in 0..4 {
+            // use two byte entries
+            buffer.insert(format!("{}", i + 10).as_bytes(), ());
+        }
+        for i in 0..4 {
+            assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
+        }
+        assert_eq!(buffer.get(4), None);
+    }
 
-#[test]
-fn iter_test_simple() {
-    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
-    for i in 0..8 {
-        buffer.insert(format!("{}", i).as_bytes(), i);
+    #[test]
+    fn insert_elements_uneven_capacity_wrap() {
+        let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
+        for i in 0..8 {
+            // use two byte entries
+            buffer.insert(format!("{}", i + 10).as_bytes(), ());
+        }
+        for i in 0..4 {
+            assert_eq!(buffer.get(i), None);
+        }
+        for i in 4..8 {
+            assert_eq!(buffer.get(i), Some((format!("{}", i + 10).as_bytes(), &())));
+        }
+        assert_eq!(buffer.get(8), None);
     }
-    let mut i: i32 = 0;
-    for (data, flag) in buffer.iter() {
-        assert_eq!(data, format!("{}", i).as_bytes());
-        assert_eq!(*flag, i);
-        i += 1;
-    }
-    assert_eq!(i, 8);
-}
 
-#[test]
-fn iter_test_wrap() {
-    let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
-    for i in 0..16 {
-        buffer.insert(format!("{}", i).as_bytes(), i);
+    #[test]
+    fn insert_empty() {
+        let mut buffer: LineBuffer<(), typenum::U8> = LineBuffer::new(9);
+        buffer.insert(format!("{}", 21).as_bytes(), ());
+        let empty = [0; 0];
+        buffer.insert(&empty, ());
+        assert_eq!(buffer.get(0), Some((format!("{}", 21).as_bytes(), &())));
+        assert_eq!(buffer.get(1), Some((&empty[0..0], &())));
     }
-    let mut i: i32 = 12;
-    for (data, flag) in buffer.iter() {
-        assert_eq!(*flag, i);
-        assert_eq!(data, format!("{}", i).as_bytes());
-        i += 1;
+
+    #[test]
+    fn iter_test_simple() {
+        let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+        for i in 0..8 {
+            buffer.insert(format!("{}", i).as_bytes(), i);
+        }
+        let mut i: i32 = 0;
+        for (data, flag) in buffer.iter() {
+            assert_eq!(data, format!("{}", i).as_bytes());
+            assert_eq!(*flag, i);
+            i += 1;
+        }
+        assert_eq!(i, 8);
     }
-    assert_eq!(i, 16);
+
+    #[test]
+    fn iter_test_wrap() {
+        let mut buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+        for i in 0..16 {
+            buffer.insert(format!("{}", i).as_bytes(), i);
+        }
+        let mut i: i32 = 12;
+        for (data, flag) in buffer.iter() {
+            assert_eq!(*flag, i);
+            assert_eq!(data, format!("{}", i).as_bytes());
+            i += 1;
+        }
+        assert_eq!(i, 16);
+    }
 }
