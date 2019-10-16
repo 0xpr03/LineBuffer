@@ -56,6 +56,7 @@ pub struct Iter<'a, T: Debug> {
     written_bytes: usize,
     data: &'a [u8],
     len: usize,
+    first_run: bool,
     iter_book: arraydeque::Iter<'a, Entry<T>>,
 }
 
@@ -69,10 +70,11 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let mut entry = self.iter_book.next()?;
 
-        if self.written_bytes >= self.capacity {
+        if self.first_run && self.written_bytes >= self.capacity {
             while entry.start < self.written_bytes - self.capacity {
                 entry = self.iter_book.next()?;
             }
+            self.first_run = false;
         }
 
         let start = entry.start % self.capacity;
@@ -198,6 +200,7 @@ where
     pub fn iter(&self) -> Iter<T> {
         Iter {
             data: &self.data,
+            first_run: true,
             len: self.book_keeping.length_max(),
             written_bytes: self.written_bytes,
             iter_book: self.book_keeping.iter(),
@@ -396,6 +399,15 @@ fn insert_empty() {
     buffer.insert(&empty, ());
     assert_eq!(buffer.get(0), Some((format!("{}", 21).as_bytes(), &())));
     assert_eq!(buffer.get(1), Some((&empty[0..0], &())));
+}
+
+#[test]
+fn iter_test_empty() {
+    let buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+    assert_eq!(buffer.iter().next(),None);
+
+    let buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(0);
+    assert_eq!(buffer.iter().next(),None);
 }
 
 #[test]
