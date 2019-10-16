@@ -1,13 +1,14 @@
 [package]
 name = "linebuffer"
 readme = "README.md"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Aron Heinecke <aron.heinecke@t-online.de>"]
 edition = "2018"
-keywords = ["ring", "buffer"]
+keywords = ["ring", "buffer", "circular", "queue"]
 repository = "https://github.com/0xpr03/LineBuffer"
 description = "ringbuffer for dynamic sized u8-elements"
 license = "MIT/Apache-2.0"
+categories = ["data-structures"]
 
 [dependencies]
 arraydeque = {features= ["use_generic_array"], version = "0.4" }
