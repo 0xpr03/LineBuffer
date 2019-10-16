@@ -55,9 +55,9 @@ where
 pub struct Iter<'a, T: Debug> {
     capacity: usize,
     written_bytes: usize,
-    first_run: bool,
     data: &'a [u8],
     len: usize,
+    first_run: bool,
     iter_book: arraydeque::Iter<'a, Entry<T>>,
 }
 
@@ -69,33 +69,18 @@ where
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let mut next;
-        if self.first_run {
-            if self.written_bytes >= self.capacity {
-                loop {
-                    next = self.iter_book.next();
-                    match next {
-                        Some(entry) => {
-                            if entry.start >= self.written_bytes - self.capacity {
-                                break;
-                            }
-                        }
-                        None => break,
-                    }
-                }
-            } else {
-                next = self.iter_book.next();
+        let mut entry = self.iter_book.next()?;
+
+        if self.first_run && self.written_bytes >= self.capacity {
+            while entry.start < self.written_bytes - self.capacity {
+                entry = self.iter_book.next()?;
             }
-            self.first_run = true;
-        } else {
-            next = self.iter_book.next();
+            self.first_run = false;
         }
 
-        if let Some(entry) = next {
-            let start = entry.start % self.capacity;
-            return Some((&self.data[start..start + entry.length], &entry.addition));
-        }
-        None
+        let start = entry.start % self.capacity;
+
+        Some((&self.data[start..start + entry.length], &entry.addition))
     }
 
     #[inline]
@@ -419,6 +404,15 @@ mod tests {
         buffer.insert(&empty, ());
         assert_eq!(buffer.get(0), Some((format!("{}", 21).as_bytes(), &())));
         assert_eq!(buffer.get(1), Some((&empty[0..0], &())));
+    }
+
+    #[test]
+    fn iter_test_empty() {
+        let buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(9);
+        assert_eq!(buffer.iter().next(), None);
+
+        let buffer: LineBuffer<i32, typenum::U8> = LineBuffer::new(0);
+        assert_eq!(buffer.iter().next(), None);
     }
 
     #[test]
